@@ -1,7 +1,6 @@
-import networkx as nx
 import streamlit as st
-import matplotlib.pyplot as plt
 from constants import Constants
+from backend import adjacency_to_graph, draw_graph
 
 # Context
 st.title("Software Scheduled Networking (SSN) Demo")
@@ -29,11 +28,22 @@ objective = st.selectbox(
     options=["Minimise Latency", "Maximise Throughput"],
     help="Select the objective for the scheduling algorithm.",
 )
-# Submit button
 submit = st.button("Submit")
 
+# Display outputs
 if submit and adjacency_list and data_transfers:
     st.subheader("Graph")
+    try:
+        # Render the graph to create a schedule for
+        graph = adjacency_to_graph(adjacency_list)
+        draw_graph(graph, "original.png")
+        st.image("original.png", caption="Original Graph")
+
+        # Create the schedule
+
+    except Exception as e:
+        st.error(f"Andrew thought of an edge case. There goes by shot at the job 😭")
+
 # Error message
 elif submit and not (adjacency_list and data_transfers):
     st.write(
