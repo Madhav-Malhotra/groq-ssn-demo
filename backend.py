@@ -1,5 +1,6 @@
 import ast
 import uuid
+import heapq
 import networkx as nx
 import matplotlib.pyplot as plt
 
@@ -62,9 +63,31 @@ class SchedulingUtils:
         """
         Find shortest path from node A to node B as a list of nodes
         """
-        raise NotImplementedError(
-            "This method should be implemented using Dijkstra's algorithm or similar."
-        )
+        # Validation
+        from_node, to_node = transfer
+        if from_node not in graph or to_node not in graph:
+            return []
+
+        # Setup
+        pq = []
+        # pq format: (numEdges, path)
+        heapq.heappush(pq, (0, [from_node]))
+        visited = set()
+
+        # Dijkstra's algorithm
+        while pq:
+            cost, path = heapq.heappop(pq)
+            curr = path[-1]
+
+            if curr == to_node:
+                return path
+            if curr not in visited:
+                visited.add(curr)
+                for adjacent in graph[curr]:
+                    if adjacent not in visited:
+                        heapq.heappush(pq, (cost + 1, path + [adjacent]))
+
+        return []
 
     def uncontested_paths(
         self,
