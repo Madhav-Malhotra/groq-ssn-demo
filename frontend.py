@@ -43,9 +43,23 @@ if submit and adjacency_list and data_transfers:
         st.image("original.png", caption="Original Graph")
 
         # Create the schedule
+        st.subheader("Schedule")
+        schedule = s.create_schedule(
+            adjacency_list, data_transfers, objective.lower() != "minimise latency"
+        )
+        v.schedule_to_gif(
+            graph,
+            schedule=schedule,
+            outfile="schedule",
+        )
+        st.image("schedule.gif", caption="Scheduled Transfers")
+        st.write(f"Latency: {len(schedule.keys())} cycles")
+        st.write(
+            f"Throughput: {sum( [len(schedule[t].keys()) for t in schedule.keys()] ) / len(schedule.keys())} transfers per cycle"
+        )
 
     except Exception as e:
-        st.error(f"Andrew thought of an edge case. There goes by shot at the job 😭")
+        st.error(f"Andrew thought of an edge case. There goes my shot at the job 😭")
 
 # Error message
 elif submit and not (adjacency_list and data_transfers):
