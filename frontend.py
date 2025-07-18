@@ -1,6 +1,6 @@
 import streamlit as st
 from constants import Constants
-from backend import adjacency_to_graph, draw_graph
+from backend import VisualisationUtils, SchedulingUtils
 
 # Context
 st.title("Software Scheduled Networking (SSN) Demo")
@@ -34,9 +34,12 @@ submit = st.button("Submit")
 if submit and adjacency_list and data_transfers:
     st.subheader("Graph")
     try:
+        v = VisualisationUtils()
+        s = SchedulingUtils()
+
         # Render the graph to create a schedule for
-        graph = adjacency_to_graph(adjacency_list)
-        draw_graph(graph, "original.png")
+        graph = v.adjacency_to_graph(adjacency_list)
+        v.draw_graph(graph, "original.png")
         st.image("original.png", caption="Original Graph")
 
         # Create the schedule
