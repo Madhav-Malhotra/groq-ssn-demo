@@ -81,10 +81,7 @@ class Constants:
         ("P2", "C3"),  # Within Group 0: P2 -> C3 (same destination, will pipeline)
         # Scenario 2: Cross-group transfers sharing bottleneck global links
         ("P1", "C5"),  # Group 0 -> Group 1: must use P1->C0->C4->C5 (minimal path)
-        (
-            "P2",
-            "C6",
-        ),  # Group 0 -> Group 1: must use P2->C0->C4->C6 (same global link C0->C4)
+        ("P2", "C6"),  # G0 -> G1: must use P2->C0->C4->C6 (same global link C0->C4)
         # Scenario 3: Producer group to consumer group (high bandwidth demand)
         ("P8", "C4"),  # Group 2 -> Group 1: P8->P9->C5->C4 (minimal)
         ("P9", "C7"),  # Group 2 -> Group 1: same global link bottleneck

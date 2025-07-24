@@ -7,7 +7,7 @@ st.title("Software Scheduled Networking (SSN) Demo")
 st.write(
     """
     Experiment with the graph and data transfer settings below to see 
-    different static schedules to minimise latency or maximise throughput.
+    data transfer schedules with pipelining vs. edge contention negotiation.
     """
 )
 
@@ -25,8 +25,8 @@ data_transfers = st.text_area(
 )
 objective = st.selectbox(
     "Objective",
-    options=["Minimise Latency", "Maximise Throughput"],
-    help="Select the objective for the scheduling algorithm.",
+    options=["Contention negotiation", "Pipelined transfers"],
+    help="Select the scheduling algorithm.",
 )
 submit = st.button("Submit")
 
@@ -44,12 +44,13 @@ if submit and adjacency_list and data_transfers:
 
         # Create the schedule
         st.subheader("Schedule")
-        schedule = s.create_schedule(
-            adjacency_list, data_transfers, objective.lower() != "minimise latency"
+        schedule, ids = s.create_schedule(
+            adjacency_list, data_transfers, objective.lower() == "pipelined transfers"
         )
         v.schedule_to_gif(
             graph,
             schedule=schedule,
+            ids=ids,
             outfile="schedule",
         )
         st.image("schedule.gif", caption="Scheduled Transfers")

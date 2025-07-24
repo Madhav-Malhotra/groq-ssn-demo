@@ -35,7 +35,7 @@ class VisualisationUtils:
             edgecolors="black",
         )
         nx.draw_networkx_labels(G, pos)
-        nx.draw_networkx_edges(G, pos, connectionstyle="arc3,rad=0.1")
+        nx.draw_networkx_edges(G, pos, width=2)
         plt.savefig(outfile, dpi=150, bbox_inches="tight")
         plt.close()
 
@@ -43,6 +43,7 @@ class VisualisationUtils:
         self,
         G: nx.Graph,
         schedule: dict[int, dict[tuple[str, str], str]],
+        ids: dict[tuple[str, str], str],
         outfile: str = "schedule.gif",
     ):
         """
@@ -50,23 +51,14 @@ class VisualisationUtils:
         Create individual frames for each timestep and combine with PIL.
         Claude helped me write this function.
         """
-
-        # Create random coluors for each UUID
-        colours = {}
-        for edges in schedule.values():
-            for id in edges.values():
-                if id not in colours:
-                    colours[id] = f"#{id[:6]}"
+        # Create random colours for each UUID
+        colours = {id: f"#{id[:6]}" for id in ids.values()}
 
         # Compute layout once
         pos = nx.spring_layout(G, seed=self._seed)
 
         # Map transfer id to (from, to) nodes for legend
-        transfer_map = {}
-        for timestep_edges in schedule.values():
-            for edge, id in timestep_edges.items():
-                if id not in transfer_map:
-                    transfer_map[id] = edge
+        transfer_map = {id: edge for edge, id in ids.items()}
 
         # Prepare frames
         images = []
@@ -96,9 +88,7 @@ class VisualisationUtils:
                 else:
                     edge_colours.append("black")
 
-            nx.draw_networkx_edges(
-                G, pos, edge_color=edge_colours, width=2, connectionstyle="arc3,rad=0.1"
-            )
+            nx.draw_networkx_edges(G, pos, edge_color=edge_colours, width=2)
 
             # Add cycle counter to top left
             plt.text(
@@ -170,6 +160,12 @@ class SchedulingUtils:
     ) -> dict[str, set[str]]:
         """
         Create hashtable graph from adjacency list (simplifies Dijkstra)
+
+        Args:
+            adjacency_list: List of tuples representing edges in the graph
+
+        Returns:
+            Dict where keys are node labesl and values are adjacent nodes
         """
         graph = {}
         for edge in adjacency_list:
@@ -182,10 +178,22 @@ class SchedulingUtils:
         return graph
 
     def shortest_path(
-        self, graph: dict[str, set[str]], transfer: tuple[str, str]
+        self,
+        graph: dict[str, set[str]],
+        transfer: tuple[str, str],
+        costs: dict[tuple[str, str], int] = {},
     ) -> list[str]:
         """
         Find shortest path from node A to node B as a list of nodes
+
+        Args:
+            graph: see self.create_graph()
+            transfer: Tuple (from_node, to_node) representing transfer to schedule
+            costs: Optional cost per edge. If not set, each edge has cost 1.
+
+        Returns:
+            List of nodes in the shortest path from A to B, or empty list if no
+            possible path exists.
         """
         # Validation
         from_node, to_node = transfer
@@ -209,7 +217,8 @@ class SchedulingUtils:
                 visited.add(curr)
                 for adjacent in graph[curr]:
                     if adjacent not in visited:
-                        heapq.heappush(pq, (cost + 1, path + [adjacent]))
+                        d_cost = costs.get((curr, adjacent), 1)
+                        heapq.heappush(pq, (cost + d_cost, path + [adjacent]))
 
         return []
 
@@ -217,40 +226,55 @@ class SchedulingUtils:
         self,
         graph: dict[str, set[str]],
         data_transfers: list[tuple[str, str]],
+        MAX_RETRIES: int = 3,
     ) -> list[list[str]]:
         """
-        Find non-overlaping paths for all data transfers
+        Find non-overlapping paths for as many data transfers as possible.
+
+        Args:
+            graph: see self.create_graph()
+            data_transfers: List of tuples holding data transfers to schedule
+            MAX_RETRIES: max iterations to increase path cost to reduce contenttion
         """
-        # Deep clone graph for modifications
-        graph_local = graph.copy()
-
         paths = []
-        for transfer in data_transfers:
-            path = self.shortest_path(graph_local, transfer)
+        costs = {}
 
-            # If path found, remove its edges from graph to avoid conflicts
-            if path:
-                paths.append(path)
+        for R in range(1, MAX_RETRIES + 1):
+            # Initial run to find paths
+            paths = [self.shortest_path(graph, t, costs) for t in data_transfers]
 
-                for i in range(1, len(path)):
+            # Update costs to penalise edges in use
+            costs = {}
+            longest_path = max([len(p) for p in paths])
+
+            # Check for conflicted paths in the same timestep
+            for i in range(1, longest_path):
+                counts = {}
+                for p in paths:
                     try:
-                        graph_local[path[i - 1]].remove(path[i])
-                        graph_local[path[i]].remove(path[i - 1])
-                    # Could be that path doesn't exist ing raph
-                    except Exception as e:
+                        edge = (p[i], p[i - 1])
+                        edge_rev = (p[i - 1], p[i])
+                        counts[edge] = counts.get(edge, 0) + R
+                        counts[edge_rev] = counts.get(edge_rev, 0) + R
+                    except IndexError:
                         continue
 
+                for k, v in counts.items():
+                    if v > R:
+                        costs[k] = v
         return paths
 
     def create_schedule(
         self, adjacency_list: str, data_transfers: str, min_latency: bool = True
-    ) -> dict[int, dict[tuple[str, str], str]]:
+    ) -> tuple[dict[int, dict[tuple[str, str], str]], dict[tuple[str, str], str]]:
         """
         Creates a schedule to either minimise latecny or maximise throughput.
 
-        Returns a dictionary where each key is a timestep with values being the
+        Returns:
+        (1) dictionary where each key is a timestep with values being the
         edges (links) active at that timestep. Each edge is a dict mapping an edge
         (tuple of nodes) to a transfer id.
+        (2) dictionary mapping transfer ids to (from, to) nodes for legend
         """
         self._adjacency = ast.literal_eval(adjacency_list)
         self._transfers = ast.literal_eval(data_transfers)
@@ -263,13 +287,12 @@ class SchedulingUtils:
             paths = self.uncontested_paths(self._graph, self._transfers)
 
         # Allocate paths across times
-        ids = [str(uuid.uuid4()) for _ in paths]
+        ids = {}
         schedule = {}
 
-        for i, path in enumerate(paths):
-            id = ids[i]
+        for path in paths:
+            ids[(path[0], path[-1])] = str(uuid.uuid4())
             timestep = 0
-            print(f"Scheduling path {id} with nodes {path}")
 
             # Schedule each edge in the path, proagating one timestep at a time
             for j in range(1, len(path)):
@@ -281,7 +304,7 @@ class SchedulingUtils:
                 if timestep not in schedule:
                     schedule[timestep] = {}
 
-                schedule[timestep][edge] = id
+                schedule[timestep][edge] = ids[(path[0], path[-1])]
                 timestep += 1
 
-        return schedule
+        return schedule, ids
